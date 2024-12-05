@@ -62,9 +62,10 @@ customerDF = (spark.readStream
               .selectExpr("CAST(value AS STRING)")
               .select(from_json("value", customerSchema).alias("data"))
               .select("data.*")
+              .withColumn("processingTime", current_timestamp()) 
               .withWatermark("last_login", "2 hours") 
              )
-# customerDF = customerDF.withColumn("@timestamp", col("last_login"))
+customerDF = customerDF.withColumn("@timestamp", col("processingTime"))
 
 # Read data from 'ecommerce_products' topic
 productSchema = StructType([
@@ -87,6 +88,7 @@ productDF = spark.readStream \
     .select("data.*") \
     .withColumn("processingTime", current_timestamp())  # Add processing timestamp
 
+productDF = productDF.withColumn("@timestamp", col("processingTime"))
 productDF = productDF.withWatermark("processingTime", "2 hours")
 
 
@@ -111,6 +113,7 @@ transactionDF = spark.readStream \
     .select("data.*")
 
 transactionDF = transactionDF.withColumn("processingTime", current_timestamp())
+transactionDF = transactionDF.withColumn("@timestamp", col("processingTime"))
 transactionDF = transactionDF.withWatermark("processingTime", "2 hours")
 
 
@@ -135,6 +138,8 @@ productViewDF = (spark.readStream
                  .withWatermark("timestamp", "1 hour")
                  )
 productViewDF = productViewDF.withColumn("processingTime", current_timestamp())
+productViewDF = productViewDF.withColumn("@timestamp", col("processingTime"))
+
 # productViewDF = productViewDF.withWatermark("processingTime", "2 hours")
 
 # Read data from 'ecommerce_system_logs' topic
@@ -156,6 +161,7 @@ systemLogDF = spark.readStream \
     .select("data.*")
 
 systemLogDF = systemLogDF.withColumn("processingTime", current_timestamp())
+systemLogDF = systemLogDF.withColumn("@timestamp", col("processingTime"))
 systemLogDF = systemLogDF.withWatermark("processingTime", "2 hours")
 
 # Read data from 'ecommerce_user_interactions' topic
@@ -179,11 +185,12 @@ userInteractionDF = spark.readStream \
     .select("data.*")
 
 userInteractionDF = userInteractionDF.withColumn("processingTime", current_timestamp())
+userInteractionDF = userInteractionDF.withColumn("@timestamp", col("processingTime"))
 userInteractionDF = userInteractionDF.withWatermark("processingTime", "2 hours")
 
 reviewsDF = userInteractionDF.filter(userInteractionDF["interaction_type"] == "review")
 reviewsDF = reviewsDF.withColumn("sentiment", sentiment_udf(reviewsDF["details"]))
-reviewsDF = reviewsDF[['product_id', 'sentiment']]
+reviewsDF = reviewsDF[['product_id', 'sentiment', '@timestamp']]
 
 #This analysis  focus on demographics and account activity.
 customerAnalysisDF = (customerDF
