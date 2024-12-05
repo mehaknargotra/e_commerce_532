@@ -10,8 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 fake = Faker()
 
-customers = []
-products = []
+customers = [{'customer_id': '8fbd6821-0ee2-4065-9301-da4d3fc0c8ca', 'name': 'Jason Kirby', 'email': 'warrennancy@example.org', 'location': '240 Jennifer Lake Suite 583\nLake Paulton, GA 61941', 'age': 47, 'gender': 'Female', 'account_created': '2024-11-26', 'last_login': '2024-12-02T04:45:17.872517'}]
+products = [{'product_id': '983df3e2-6327-4bad-804a-35a49deaa5b5', 'name': 'Memory', 'category': 'Home & Garden', 'price': 298.91, 'stock_quantity': 76, 'supplier': 'Jones and Sons', 'rating': 4.4}]
 # Generate Customer Data
 def generate_customer():
     customer = {
@@ -41,9 +41,9 @@ def generate_product():
     products.append(product["product_id"])
     return product
 # Generate Transaction Data
-def generate_transaction():
-    customer_id = random.choice(customers)
-    product_id = random.choice(products)
+def generate_transaction(customer_id = None, product_id = None):
+    customer_id = customer_id or random.choice(customers)
+    product_id = product_id or random.choice(products)
     return {
         "transaction_id": fake.uuid4(),
         "customer_id": customer_id,
@@ -54,11 +54,13 @@ def generate_transaction():
         "payment_method": random.choice(["credit card", "PayPal", "bank transfer"])
     }
 # Generate Product View Data
-def generate_product_view():
+def generate_product_view(customer_id = None, product_id = None):
+    customer_id = customer_id or random.choice(customers)
+    product_id = product_id or random.choice(products)
     return {
         "view_id": fake.uuid4(),
-        "customer_id": random.choice(customers),
-        "product_id": random.choice(products),
+        "customer_id": customer_id,
+        "product_id": product_id,
         "timestamp": fake.date_time_this_year().isoformat(),
         "view_duration": random.randint(10, 300)  # Duration in seconds
     }
@@ -74,40 +76,15 @@ def generate_system_log():
 # Generate User Interaction Data
 def generate_user_interaction():
     interaction_types = ["wishlist_addition", "review", "rating"]
+    interaction_type = random.choice(interaction_types) 
     return {
         "interaction_id": fake.uuid4(),
         "customer_id": random.choice(customers),
         "product_id": random.choice(products),
         "timestamp": fake.date_time_this_year().isoformat(),
-        "interaction_type": random.choice(interaction_types),
-        "details": fake.sentence() if interaction_types == "review" else None
+        "interaction_type": interaction_type,
+        "details": fake.sentence() if interaction_type == "review" else None
     }
-##add this code to send data to Kafka
-# # Function to send data to Kafka
-# def send_data():
-#     # Occasionally add new customers or products
-#     if random.random() < 0.5:
-#         customer = generate_customer()
-#         producer.send('ecommerce_customers', value=customer)
-#     else:
-#         product = generate_product()
-#         producer.send('ecommerce_products', value=product)
-#     # Higher chance to create transactions and interactions
-#     if customers and products:
-#         transaction = generate_transaction()
-#         producer.send('ecommerce_transactions', value=transaction)
-#         product_view = generate_product_view()
-#         if product_view:
-#             producer.send('ecommerce_product_views', value=product_view)
-#         user_interaction = generate_user_interaction()
-#         if user_interaction:
-#             producer.send('ecommerce_user_interactions', value=user_interaction)
-#     producer.send('ecommerce_system_logs', value=generate_system_log())
-# # Parallel Data Generation
-# with ThreadPoolExecutor(max_workers=5) as executor:
-#     while True:
-#         executor.submit(send_data)
-#         time.sleep(random.uniform(0.01, 0.1))
 
 
 #####CODE TO REMOVE (added by mehak)###########
