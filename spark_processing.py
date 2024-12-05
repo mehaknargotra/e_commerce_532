@@ -224,8 +224,25 @@ productAnalysisDF = productDF \
     )
 
 
-# query_1 = reviewsDF.writeStream \
-#     .outputMode("append") \
+# ordered customer activity in terms of the number of interactions they have with products, such as wishlist additions, reviews, or ratings.
+customerActivityDF = (userInteractionDF
+                      .groupBy("customer_id")
+                      .agg(
+                          count("interaction_id").alias("total_interactions"),
+                          count(when(col("interaction_type") == "wishlist_addition", 1)).alias("wishlist_additions"),
+                          count(when(col("interaction_type") == "review", 1)).alias("reviews"),
+                          count(when(col("interaction_type") == "rating", 1)).alias("ratings")
+                      ).orderBy(col("total_interactions").desc()) 
+                     )
+customerActivityDF = customerActivityDF.withColumn("@timestamp", current_timestamp())
+
+# query_1 = customerActivityDF.writeStream \
+#     .outputMode("complete") \
+#     .format("console") \
+#     .start()
+
+# query_2 = customerAnalysisDF.writeStream \
+#     .outputMode("complete") \
 #     .format("console") \
 #     .start()
 
@@ -269,6 +286,7 @@ def writeToElasticsearch(df, index_name):
 writeToElasticsearch(customerAnalysisDF, "customer_analysis")
 writeToElasticsearch(productAnalysisDF, "product_analysis")
 writeToElasticsearch(reviewsDF, "sentiment_analysis")
+writeToElasticsearch(customerActivityDF, "customer_activity_analysis")
 
 # Wait for any of the streams to finish
 spark.streams.awaitAnyTermination()

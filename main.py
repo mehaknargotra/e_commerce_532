@@ -129,4 +129,4 @@ if __name__ == "__main__":
     with ThreadPoolExecutor(max_workers=5) as executor:
         while True:
             executor.submit(send_data)
-            time.sleep(random.uniform(0.1, 0.5))
+            time.sleep(random.uniform(1, 2))
