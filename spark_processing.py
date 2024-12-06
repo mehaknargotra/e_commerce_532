@@ -284,6 +284,13 @@ lowStockDF = productWithThresholdDF.filter(
 ).withColumn(
     "alert", lit("Low stock level detected")
 )
+lowStockDF = lowStockDF.withColumn(
+    "unique_id",
+    concat_ws("_", col("product_id"), col("processingTime").cast("string"))
+)
+
+lowStockDF = lowStockDF.withColumn("processingTime", current_timestamp())
+lowStockDF = lowStockDF.withColumn("@timestamp", date_format(col("processingTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSZ"))
 
 
 
@@ -347,9 +354,16 @@ retentionDF.writeStream \
     .option("es.resource", "retention_index") \
     .option("es.mapping.id", "unique_id") \
     .start()
+lowStockDF.writeStream \
+    .outputMode("update") \
+    .format("org.elasticsearch.spark.sql") \
+    .option("checkpointLocation", "/tmp/spark/checkpoints/lowstock_analysis") \
+    .option("es.nodes", "localhost") \
+    .option("es.port", "9200") \
+    .option("es.resource", "lowstock_index") \
+    .option("es.mapping.id", "unique_id") \
+    .start() 
 
-retentionDF.writeStream.format("console").outputMode("complete").start().awaitTermination()
-# top20CustomersDF.writeStream.format("console").outputMode("complete").start().awaitTermination()
+top20CustomersDF.writeStream.format("console").outputMode("complete").start().awaitTermination()
 
-retentionDF
 spark.streams.awaitAnyTermination()
