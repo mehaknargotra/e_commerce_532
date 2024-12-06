@@ -10,7 +10,6 @@ load_dotenv()
 
 kafka_broker = os.getenv('KAFKA_BROKER', 'localhost:9092')
 
-
 try:
     print(f"Connecting to Kafka broker at: {kafka_broker}")
     producer = KafkaProducer(
@@ -23,6 +22,14 @@ except KafkaError as e:
     raise
 
 def create_topic(topic_name, num_partitions, replication_factor):
+
+    """
+    Create a Kafka topic with the given name, number of partitions, and replication factor.
+
+    :param topic_name: Name of the Kafka topic
+    :param num_partitions: Number of partitions for the topic
+    :param replication_factor: Replication factor for the topic
+    """
 
     try:
         admin_client = KafkaAdminClient(bootstrap_servers=kafka_broker)
@@ -41,6 +48,14 @@ def create_topic(topic_name, num_partitions, replication_factor):
         admin_client.close()
 
 def send_message(topic, message):
+
+    """
+    Send a message to a specified Kafka topic.
+
+    :param topic: The Kafka topic to send the message to
+    :param message: The message to send (dictionary or JSON-serializable object)
+    """
+    
     try:
         print(f"Connecting to Kafka broker at: {kafka_broker}")
         producer = KafkaProducer(
