@@ -251,7 +251,7 @@ customerActivityDF = customerActivityDF.withColumn("@timestamp", current_timesta
 top20CustomersDF = customerActivityDF.limit(20)
 
 
-# low stock level alert
+# Low Stock Level Alert
 salesVelocityDF = transactionDF.groupBy(
     col("product_id")
 ).agg(
@@ -266,22 +266,26 @@ salesVelocityDF.writeStream \
     .start()
 
 spark.sql("SELECT * FROM sales_velocity").show()
+
+# Join with Product Data to include category
 productWithThresholdDF = productDF.join(
-    spark.sql("SELECT * FROM sales_velocity"), 
+    spark.sql("SELECT * FROM sales_velocity"),
     "product_id",
     "left_outer"
 ).withColumn(
-    "threshold", col("average_daily_sales") * 2  
-).fillna({"threshold": 7}) 
+    "threshold", col("average_daily_sales") * 2
+).fillna({"threshold": 10})  # Default threshold
 
-# Filter for Low Stock
+# Filter for Low Stock and Include Category
 lowStockDF = productWithThresholdDF.filter(
     col("stock_quantity") < col("threshold")
 ).select(
-    "product_id", "name", "stock_quantity", "threshold", "processingTime"
+    "product_id", "category", "name", "stock_quantity", "threshold", "processingTime"
 ).withColumn(
     "alert", lit("Low stock level detected")
 )
+
+
 
 #number of customers retained - retention analysis
 retentionDF = transactionDF.groupBy(
