@@ -239,17 +239,17 @@ productAnalysisDF = productAnalysisDF.withColumn("@timestamp", date_format(col("
 
 
 # ordered customer activity in terms of the number of interactions they have with products, such as wishlist additions, reviews, or ratings.
-customerActivityDF = (userInteractionDF
-                      .groupBy("customer_id")
-                      .agg(
-                          count("interaction_id").alias("total_interactions"),
-                          count(when(col("interaction_type") == "wishlist_addition", 1)).alias("wishlist_additions"),
-                          count(when(col("interaction_type") == "review", 1)).alias("reviews"),
-                          count(when(col("interaction_type") == "rating", 1)).alias("ratings")
-                      ).orderBy(col("total_interactions").desc()) 
-                     )
-customerActivityDF = customerActivityDF.withColumn("@timestamp", current_timestamp())
-top20CustomersDF = customerActivityDF.limit(20)
+# customerActivityDF = (userInteractionDF
+#                       .groupBy("customer_id")
+#                       .agg(
+#                           count("interaction_id").alias("total_interactions"),
+#                           count(when(col("interaction_type") == "wishlist_addition", 1)).alias("wishlist_additions"),
+#                           count(when(col("interaction_type") == "review", 1)).alias("reviews"),
+#                           count(when(col("interaction_type") == "rating", 1)).alias("ratings")
+#                       ).orderBy(col("total_interactions").desc()) 
+#                      )
+# customerActivityDF = customerActivityDF.withColumn("@timestamp", current_timestamp())
+# top20CustomersDF = customerActivityDF.limit(20)
 
 # query_1 = top20CustomersDF.writeStream \
 #     .outputMode("complete") \
@@ -261,47 +261,47 @@ top20CustomersDF = customerActivityDF.limit(20)
 #     .format("console") \
 #     .start()
 
-def writeToElasticsearch(df, index_name):
-    """
-    Function to write Spark DataFrame to Elasticsearch.
-    Args:
-        df (DataFrame): Spark DataFrame to be written.
-        index_name (str): Elasticsearch index name.
-    """
-    def write_and_log(batch_df, batch_id):
-        """
-        Function to write each batch of data to Elasticsearch and log the process.
-        Args:
-            batch_df (DataFrame): Batch DataFrame from Spark.
-            batch_id (int): Identifier for the batch.
-        """
-        logger.info(f"Attempting to write batch {batch_id} to Elasticsearch index {index_name}.")
-        try:
-            if not batch_df.isEmpty():
-                logger.info(f"Batch {batch_id} has data. Writing to Elasticsearch.")
-                batch_df.write \
-                    .format("org.elasticsearch.spark.sql") \
-                    .option("checkpointLocation", f"/opt/bitnami/spark/checkpoint/{index_name}/{batch_id}") \
-                    .option("es.resource", f"{index_name}/doc") \
-                    .option("es.nodes", "elasticsearch") \
-                    .option("es.port", "9200") \
-                    .option("es.nodes.wan.only", "true") \
-                    .save()
-                logger.info(f"Batch {batch_id} written successfully.")
-            else:
-                logger.info(f"Batch {batch_id} is empty. Skipping write.")
-        except Exception as e:
-            logger.error(f"Error writing batch {batch_id} to Elasticsearch: {e}")
+# def writeToElasticsearch(df, index_name):
+#     """
+#     Function to write Spark DataFrame to Elasticsearch.
+#     Args:
+#         df (DataFrame): Spark DataFrame to be written.
+#         index_name (str): Elasticsearch index name.
+#     """
+#     def write_and_log(batch_df, batch_id):
+#         """
+#         Function to write each batch of data to Elasticsearch and log the process.
+#         Args:
+#             batch_df (DataFrame): Batch DataFrame from Spark.
+#             batch_id (int): Identifier for the batch.
+#         """
+#         logger.info(f"Attempting to write batch {batch_id} to Elasticsearch index {index_name}.")
+#         try:
+#             if not batch_df.isEmpty():
+#                 logger.info(f"Batch {batch_id} has data. Writing to Elasticsearch.")
+#                 batch_df.write \
+#                     .format("org.elasticsearch.spark.sql") \
+#                     .option("checkpointLocation", f"/opt/bitnami/spark/checkpoint/{index_name}/{batch_id}") \
+#                     .option("es.resource", f"{index_name}/doc") \
+#                     .option("es.nodes", "elasticsearch") \
+#                     .option("es.port", "9200") \
+#                     .option("es.nodes.wan.only", "true") \
+#                     .save()
+#                 logger.info(f"Batch {batch_id} written successfully.")
+#             else:
+#                 logger.info(f"Batch {batch_id} is empty. Skipping write.")
+#         except Exception as e:
+#             logger.error(f"Error writing batch {batch_id} to Elasticsearch: {e}")
 
-    return df.writeStream \
-             .outputMode("append") \
-             .foreachBatch(write_and_log) \
-             .start()
+#     return df.writeStream \
+#              .outputMode("append") \
+#              .foreachBatch(write_and_log) \
+#              .start()
 
-writeToElasticsearch(customerAnalysisDF, "customer_analysis")
-writeToElasticsearch(productAnalysisDF, "product_analysis")
-writeToElasticsearch(reviewsDF, "sentiment_analysis")
-writeToElasticsearch(top20CustomersDF, "customer_activity_analysis")
+# writeToElasticsearch(customerAnalysisDF, "customer_analysis")
+# writeToElasticsearch(productAnalysisDF, "product_analysis")
+# writeToElasticsearch(reviewsDF, "sentiment_analysis")
+# writeToElasticsearch(top20CustomersDF, "customer_activity_analysis")
 
 # Wait for any of the streams to finish
 
