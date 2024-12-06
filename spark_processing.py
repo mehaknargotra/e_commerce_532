@@ -251,6 +251,7 @@ customerActivityDF = customerActivityDF.withColumn("@timestamp", current_timesta
 top20CustomersDF = customerActivityDF.limit(20)
 
 
+
 # low stock level alert
 salesVelocityDF = transactionDF.groupBy(
     col("product_id")
@@ -297,6 +298,14 @@ retentionDF = transactionDF.groupBy(
     .when(col("purchase_count") > 10, "Loyal Customers")
     .otherwise("Unknown")
 )
+retentionDF = retentionDF.withColumn("processingTime", current_timestamp())
+retentionDF = retentionDF.withColumn(
+    "unique_id",
+    concat_ws("_", col("customer_id"), col("processingTime").cast("string"))
+)
+
+retentionDF = retentionDF.withColumn("processingTime", current_timestamp())
+retentionDF = retentionDF.withColumn("@timestamp", date_format(col("processingTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSZ"))
 
 
 # Wait for any of the streams to finish
@@ -326,7 +335,18 @@ reviewsDF.writeStream \
     .option("es.port", "9200") \
     .option("es.resource", "review_index") \
     .start()
+retentionDF.writeStream \
+    .outputMode("update") \
+    .format("org.elasticsearch.spark.sql") \
+    .option("checkpointLocation", "/tmp/spark/checkpoints/retention_analysis") \
+    .option("es.nodes", "localhost") \
+    .option("es.port", "9200") \
+    .option("es.resource", "retention_index") \
+    .option("es.mapping.id", "unique_id") \
+    .start()
 
-# productDF.writeStream.format("console").outputMode("append").start().awaitTermination()
-# productAnalysisDF.writeStream.format("console").outputMode("complete").start().awaitTermination()
+retentionDF.writeStream.format("console").outputMode("complete").start().awaitTermination()
+# top20CustomersDF.writeStream.format("console").outputMode("complete").start().awaitTermination()
+
+retentionDF
 spark.streams.awaitAnyTermination()
