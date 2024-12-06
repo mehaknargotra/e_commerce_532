@@ -1,7 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, TimestampType
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import udf 
 from textblob import TextBlob
 from pyspark.sql import DataFrame
 from dotenv import load_dotenv
@@ -35,13 +35,14 @@ spark = SparkSession.builder \
     .appName("Ecommerce Data Pipeline") \
     .config("spark.es.nodes", "localhost") \
     .config("spark.es.port", "9200") \
-    .config("spark.es.nodes.wan.only", "true") \
+    .config("spark.es.nodes.wan.only", "false") \
     .getOrCreate()
 
 spark.sparkContext.setLogLevel("ERROR")
             
 kafka_bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
-# kafka_topic = os.getenv('KAFKA_TOPIC', 'ecommerce_customers')
+# kafka_topic = os.getenv('KAFKA_TOPIC', '
+# erce_customers')
 # Read data from 'ecommerce_customers' topic
 customerSchema = StructType([
     StructField("customer_id", StringType(), True),
@@ -140,8 +141,6 @@ productViewDF = (spark.readStream
 productViewDF = productViewDF.withColumn("processingTime", current_timestamp())
 productViewDF = productViewDF.withColumn("@timestamp", col("processingTime"))
 
-# productViewDF = productViewDF.withWatermark("processingTime", "2 hours")
-
 # Read data from 'ecommerce_system_logs' topic
 systemLogSchema = StructType([
     StructField("log_id", StringType(), True),
@@ -185,7 +184,7 @@ userInteractionDF = spark.readStream \
     .select("data.*")
 
 userInteractionDF = userInteractionDF.withColumn("processingTime", current_timestamp())
-userInteractionDF = userInteractionDF.withColumn("@timestamp", col("processingTime"))
+userInteractionDF = userInteractionDF.withColumn("@timestamp", date_format(col("processingTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSZ"))
 userInteractionDF = userInteractionDF.withWatermark("processingTime", "2 hours")
 
 reviewsDF = userInteractionDF.filter(userInteractionDF["interaction_type"] == "review")
@@ -195,7 +194,7 @@ reviewsDF = reviewsDF[['product_id', 'sentiment', '@timestamp']]
 #This analysis  focus on demographics and account activity.
 customerAnalysisDF = (customerDF
                       .groupBy(
-                          window(col("last_login"), "1 day"),  # Windowing based on last_login
+                          window(col("last_login"), "5 minutes"),  # Windowing based on last_login
                           "gender"
                       )
                       .agg(
@@ -204,11 +203,17 @@ customerAnalysisDF = (customerDF
                       )
                      )
 
+customerAnalysisDF = customerAnalysisDF.withColumn(
+    "unique_id",
+    concat_ws("_", col("gender"), col("window.start").cast("string"))  # Access window.start explicitly
+)
+customerAnalysisDF = customerAnalysisDF.withColumn("processingTime", current_timestamp())
+customerAnalysisDF = customerAnalysisDF.withColumn("@timestamp", date_format(col("processingTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSZ"))
 
 # Analyzing product popularity and stock status with windowing
 productAnalysisDF = productDF \
     .groupBy(
-        window(col("processingTime"), "1 hour"),  # Window based on processingTime
+        window(col("processingTime"), "5 minutes"),  # Window based on processingTime
         "category"
     ) \
     .agg(
@@ -222,53 +227,46 @@ productAnalysisDF = productDF \
         col("average_price"),
         col("total_stock")
     )
+productAnalysisDF = productAnalysisDF.withColumn(
+    "unique_id",
+    concat_ws("_", col("category"), col("window_start").cast("string"))
+)
+
+productAnalysisDF = productAnalysisDF.withColumn("processingTime", current_timestamp())
+productAnalysisDF = productAnalysisDF.withColumn("@timestamp", date_format(col("processingTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSZ"))
 
 
-# query_1 = reviewsDF.writeStream \
-#     .outputMode("append") \
-#     .format("console") \
-#     .start()
-
-def writeToElasticsearch(df, index_name):
-    """
-    Function to write Spark DataFrame to Elasticsearch.
-    Args:
-        df (DataFrame): Spark DataFrame to be written.
-        index_name (str): Elasticsearch index name.
-    """
-    def write_and_log(batch_df, batch_id):
-        """
-        Function to write each batch of data to Elasticsearch and log the process.
-        Args:
-            batch_df (DataFrame): Batch DataFrame from Spark.
-            batch_id (int): Identifier for the batch.
-        """
-        logger.info(f"Attempting to write batch {batch_id} to Elasticsearch index {index_name}.")
-        try:
-            if not batch_df.isEmpty():
-                logger.info(f"Batch {batch_id} has data. Writing to Elasticsearch.")
-                batch_df.write \
-                    .format("org.elasticsearch.spark.sql") \
-                    .option("checkpointLocation", f"/opt/bitnami/spark/checkpoint/{index_name}/{batch_id}") \
-                    .option("es.resource", f"{index_name}/doc") \
-                    .option("es.nodes", "elasticsearch") \
-                    .option("es.port", "9200") \
-                    .option("es.nodes.wan.only", "true") \
-                    .save()
-                logger.info(f"Batch {batch_id} written successfully.")
-            else:
-                logger.info(f"Batch {batch_id} is empty. Skipping write.")
-        except Exception as e:
-            logger.error(f"Error writing batch {batch_id} to Elasticsearch: {e}")
-
-    return df.writeStream \
-             .outputMode("append") \
-             .foreachBatch(write_and_log) \
-             .start()
-
-writeToElasticsearch(customerAnalysisDF, "customer_analysis")
-writeToElasticsearch(productAnalysisDF, "product_analysis")
-writeToElasticsearch(reviewsDF, "sentiment_analysis")
 
 # Wait for any of the streams to finish
+
+
+customerAnalysisDF.writeStream \
+    .outputMode("update") \
+    .format("org.elasticsearch.spark.sql") \
+    .option("checkpointLocation", "/tmp/spark/checkpoints/customeranalysis_analysis") \
+    .option("es.nodes", "localhost") \
+    .option("es.port", "9200") \
+    .option("es.resource", "customeranalysis_index") \
+    .option("es.mapping.id", "unique_id") \
+    .start() 
+productAnalysisDF.writeStream \
+    .outputMode("update") \
+    .format("org.elasticsearch.spark.sql") \
+    .option("checkpointLocation", "/tmp/spark/checkpoints/productanalysis_analysis") \
+    .option("es.nodes", "localhost") \
+    .option("es.port", "9200") \
+    .option("es.resource", "productanalysis_index") \
+    .option("es.mapping.id", "unique_id") \
+    .start()
+reviewsDF.writeStream \
+    .outputMode("append") \
+    .format("org.elasticsearch.spark.sql") \
+    .option("checkpointLocation", "/tmp/spark/checkpoints/review_analysis") \
+    .option("es.nodes", "localhost") \
+    .option("es.port", "9200") \
+    .option("es.resource", "review_index") \
+    .start()
+
+# productDF.writeStream.format("console").outputMode("append").start().awaitTermination()
+# productAnalysisDF.writeStream.format("console").outputMode("complete").start().awaitTermination()
 spark.streams.awaitAnyTermination()
