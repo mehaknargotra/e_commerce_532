@@ -290,8 +290,13 @@ retentionDF = transactionDF.groupBy(
     count("transaction_id").alias("purchase_count")
 ).filter(
     col("purchase_count") > 1
+).withColumn(
+    "shopper_type",
+    when((col("purchase_count") >= 2) & (col("purchase_count") <= 3), "Occasional Shoppers")
+    .when((col("purchase_count") >= 4) & (col("purchase_count") <= 10), "Frequent Buyers")
+    .when(col("purchase_count") > 10, "Loyal Customers")
+    .otherwise("Unknown")
 )
-
 
 
 # Wait for any of the streams to finish
