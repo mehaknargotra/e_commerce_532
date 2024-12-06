@@ -237,6 +237,74 @@ productAnalysisDF = productAnalysisDF.withColumn("@timestamp", date_format(col("
 
 
 
+# ordered customer activity in terms of the number of interactions they have with products, such as wishlist additions, reviews, or ratings.
+customerActivityDF = (userInteractionDF
+                      .groupBy("customer_id")
+                      .agg(
+                          count("interaction_id").alias("total_interactions"),
+                          count(when(col("interaction_type") == "wishlist_addition", 1)).alias("wishlist_additions"),
+                          count(when(col("interaction_type") == "review", 1)).alias("reviews"),
+                          count(when(col("interaction_type") == "rating", 1)).alias("ratings")
+                      ).orderBy(col("total_interactions").desc()) 
+                     )
+customerActivityDF = customerActivityDF.withColumn("@timestamp", current_timestamp())
+top20CustomersDF = customerActivityDF.limit(20)
+
+
+
+
+# low stock level alert
+salesVelocityDF = transactionDF.groupBy(
+    col("product_id")
+).agg(
+    avg("quantity").alias("average_daily_sales")
+)
+
+salesVelocityDF.writeStream \
+    .outputMode("complete") \
+    .format("memory") \
+    .queryName("sales_velocity") \
+    .option("checkpointLocation", "/tmp/sales_velocity_checkpoint") \
+    .start()
+
+spark.sql("SELECT * FROM sales_velocity").show()
+productWithThresholdDF = productDF.join(
+    spark.sql("SELECT * FROM sales_velocity"), 
+    "product_id",
+    "left_outer"
+).withColumn(
+    "threshold", col("average_daily_sales") * 2  
+).fillna({"threshold": 7}) 
+
+# Filter for Low Stock
+lowStockDF = productWithThresholdDF.filter(
+    col("stock_quantity") < col("threshold")
+).select(
+    "product_id", "name", "stock_quantity", "threshold", "processingTime"
+).withColumn(
+    "alert", lit("Low stock level detected")
+)
+
+#number of customers retained - retention analysis
+retentionDF = transactionDF.groupBy(
+    col("customer_id")
+).agg(
+    count("transaction_id").alias("purchase_count")
+).filter(
+    col("purchase_count") > 1
+)
+
+# query_3 = retentionDF.writeStream \
+#     .outputMode("update") \
+#     .format("console") \
+#     .option("truncate", False) \
+#     .start()
+
+# query_1 = lowStockDF.writeStream \
+#     .outputMode("append") \
+
+
+
 
 # ordered customer activity in terms of the number of interactions they have with products, such as wishlist additions, reviews, or ratings.
 # customerActivityDF = (userInteractionDF
@@ -253,6 +321,7 @@ productAnalysisDF = productAnalysisDF.withColumn("@timestamp", date_format(col("
 
 # query_1 = top20CustomersDF.writeStream \
 #     .outputMode("complete") \
+
 #     .format("console") \
 #     .start()
 
@@ -260,6 +329,51 @@ productAnalysisDF = productAnalysisDF.withColumn("@timestamp", date_format(col("
 #     .outputMode("complete") \
 #     .format("console") \
 #     .start()
+
+
+def writeToElasticsearch(df, index_name):
+    """
+    Function to write Spark DataFrame to Elasticsearch.
+    Args:
+        df (DataFrame): Spark DataFrame to be written.
+        index_name (str): Elasticsearch index name.
+    """
+    def write_and_log(batch_df, batch_id):
+        """
+        Function to write each batch of data to Elasticsearch and log the process.
+        Args:
+            batch_df (DataFrame): Batch DataFrame from Spark.
+            batch_id (int): Identifier for the batch.
+        """
+        logger.info(f"Attempting to write batch {batch_id} to Elasticsearch index {index_name}.")
+        try:
+            if not batch_df.isEmpty():
+                logger.info(f"Batch {batch_id} has data. Writing to Elasticsearch.")
+                batch_df.write \
+                    .format("org.elasticsearch.spark.sql") \
+                    .option("checkpointLocation", f"/opt/bitnami/spark/checkpoint/{index_name}/{batch_id}") \
+                    .option("es.resource", f"{index_name}/doc") \
+                    .option("es.nodes", "elasticsearch") \
+                    .option("es.port", "9200") \
+                    .option("es.nodes.wan.only", "true") \
+                    .save()
+                logger.info(f"Batch {batch_id} written successfully.")
+            else:
+                logger.info(f"Batch {batch_id} is empty. Skipping write.")
+        except Exception as e:
+            logger.error(f"Error writing batch {batch_id} to Elasticsearch: {e}")
+
+    return df.writeStream \
+             .outputMode("append") \
+             .foreachBatch(write_and_log) \
+             .start()
+
+writeToElasticsearch(customerAnalysisDF, "customer_analysis")
+writeToElasticsearch(productAnalysisDF, "product_analysis")
+writeToElasticsearch(reviewsDF, "sentiment_analysis")
+writeToElasticsearch(top20CustomersDF, "customer_activity_analysis")
+writeToElasticsearch(lowStockDF, "low_stock_alerts")
+writeToElasticsearch(retentionDF, "customer_Retention_analysis")
 
 # def writeToElasticsearch(df, index_name):
 #     """
@@ -302,6 +416,7 @@ productAnalysisDF = productAnalysisDF.withColumn("@timestamp", date_format(col("
 # writeToElasticsearch(productAnalysisDF, "product_analysis")
 # writeToElasticsearch(reviewsDF, "sentiment_analysis")
 # writeToElasticsearch(top20CustomersDF, "customer_activity_analysis")
+
 
 # Wait for any of the streams to finish
 
