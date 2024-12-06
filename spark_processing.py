@@ -235,8 +235,9 @@ customerActivityDF = (userInteractionDF
                       ).orderBy(col("total_interactions").desc()) 
                      )
 customerActivityDF = customerActivityDF.withColumn("@timestamp", current_timestamp())
+top20CustomersDF = customerActivityDF.limit(20)
 
-# query_1 = customerActivityDF.writeStream \
+# query_1 = top20CustomersDF.writeStream \
 #     .outputMode("complete") \
 #     .format("console") \
 #     .start()
@@ -286,7 +287,7 @@ def writeToElasticsearch(df, index_name):
 writeToElasticsearch(customerAnalysisDF, "customer_analysis")
 writeToElasticsearch(productAnalysisDF, "product_analysis")
 writeToElasticsearch(reviewsDF, "sentiment_analysis")
-writeToElasticsearch(customerActivityDF, "customer_activity_analysis")
+writeToElasticsearch(top20CustomersDF, "customer_activity_analysis")
 
 # Wait for any of the streams to finish
 spark.streams.awaitAnyTermination()
