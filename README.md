@@ -1,6 +1,27 @@
-# E-Commerce
+# 🛒 Real-Time E-commerce Analytics System
 
+This project simulates and analyzes real-time user interactions, purchases, and product views in an e-commerce platform using streaming data tools.
 
+## 🚀 Features
+- Kafka-based event ingestion pipeline (10K+ TPS)
+- Stream processing using PySpark
+- Real-time dashboards with Grafana
+- Elasticsearch integration for search and analytics
+- Performance tuning for low-latency, high-throughput data processing
+
+## 🔧 Tech Stack
+Kafka • PySpark • Python • Grafana • Elasticsearch • Docker
+
+## 📈 Use Case
+Ideal for simulating and monitoring e-commerce behavior in real time — such as customer views, cart actions, and purchases — to generate meaningful analytics for operational dashboards.
+
+## 📁 Folder Structure
+- `producers/` – Kafka event producers (e.g., clickstream data)
+- `spark_jobs/` – Spark streaming scripts for processing events
+- `dashboards/` – Grafana dashboards or configuration templates
+- `requirements.txt` – Python dependencies
+
+## ⚙️ Setup Instructions 
 ## Setup PySpark
 
 Packages to install
